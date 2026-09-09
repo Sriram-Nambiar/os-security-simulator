@@ -1,47 +1,37 @@
 /* ====================================================================
-   WINDOWS SECURITY MODEL SIMULATION -- Access Tokens & ACLs
+   WINDOWS SECURITY MODEL SIMULATION -- Access Tokens & DACLs
+   WITH PERMISSION INHERITANCE (Folders -> Files)
    ====================================================================
-   This program simulates the core concepts behind Microsoft Windows'
-   security model. It is NOT a real operating system -- it is a
-   simplified software MODEL built to demonstrate the underlying ideas:
+   This program simulates Microsoft Windows NT security authorization
+   including NTFS-style PERMISSION INHERITANCE:
 
      1. ACCESS TOKENS
-        Every process in Windows runs with an access token that records:
-          * The Security Identifier (SID) of the user who owns it
-          * A list of group SIDs the user belongs to
-          * A set of PRIVILEGES (special system-wide capabilities such
-            as SeBackupPrivilege, SeDebugPrivilege, etc.)
+        Every process runs with a security context: User SID, Group SIDs,
+        and special system privileges (e.g., SeBackupPrivilege).
 
      2. SECURITY DESCRIPTORS & DACLs
-        Every securable resource (files, registry keys, services, ...)
-        has a security descriptor that contains:
-          * An owner SID
-          * A Discretionary Access Control List (DACL) -- an ordered
-            list of Access Control Entries (ACEs)
+        Resources (Folders and Files) have a Security Descriptor containing
+        an owner SID and a DACL with ordered Access Control Entries (ACEs).
 
-     3. ACE EVALUATION ORDER (the key Windows rule)
-        When a process requests access to a resource, Windows walks
-        the DACL from first ACE to last:
-          a) If an explicit DENY ACE matches the requesting token and
-             covers ANY of the requested rights -> ACCESS DENIED.
-          b) As it walks, it accumulates ALLOW rights from matching
-             ALLOW ACEs.
-          c) After all ACEs are checked, if all requested rights have
-             been granted -> ACCESS GRANTED.
-          d) Otherwise -> ACCESS DENIED (implicit deny).
+     3. PERMISSION INHERITANCE (Folders -> Files)
+        In Windows NTFS, child files and subfolders inherit permissions
+        from their parent container:
+          * An ACE can be EXPLICIT (set directly on the object)
+          * Or INHERITED (propagated down from a parent folder)
 
-     4. PRIVILEGE CHECKS
-        Some operations bypass normal ACL checks entirely if the
-        token carries a specific enabled privilege (e.g., an admin
-        process with SeBackupPrivilege can read any file regardless
-        of ACLs -- used by the Windows Backup utility).
+     4. CANONICAL WINDOWS EVALUATION ORDER:
+        The Windows Security Reference Monitor (SRM) checks in this order:
+          Step 0: Owner Check (implicit Full Control)
+          Step 1: EXPLICIT DENY ACEs  -> if match, DENY immediately
+          Step 2: EXPLICIT ALLOW ACEs -> accumulate rights
+                  (If all requested rights satisfied -> GRANT immediately!
+                   This allows an Explicit Allow to override an Inherited Deny!)
+          Step 3: INHERITED DENY ACEs -> if match remaining rights, DENY immediately
+          Step 4: INHERITED ALLOW ACEs-> accumulate rights
+          Step 5: If all requested rights granted -> GRANT; else -> IMPLICIT DENY
 
-   SIMPLIFICATIONS:
-     - Real Windows SIDs are long binary structures (S-1-5-21-...);
-       here we use small integer IDs.
-     - Real DACLs have inheritance, generic mappings, SACL auditing;
-       we focus on the DACL evaluation algorithm itself.
-     - Privileges are modelled as named strings for clarity.
+     5. PRIVILEGE CHECKS
+        Tokens with privileges (e.g., SeBackupPrivilege) override DACLs.
    ==================================================================== */
 
 #include <stdio.h>
@@ -51,8 +41,8 @@
 /* --------------------------- Limits --------------------------- */
 #define MAX_GROUPS        8     /* max groups per user/token   */
 #define MAX_PRIVILEGES    8     /* max privileges per token    */
-#define MAX_ACES         16     /* max ACEs per DACL           */
-#define MAX_RESOURCES    10     /* max simulated resources     */
+#define MAX_ACES         24     /* max ACEs per DACL           */
+#define MAX_RESOURCES    12     /* max simulated resources     */
 #define MAX_PROCESSES    10     /* max simulated processes     */
 #define MAX_USERS         8     /* max simulated users         */
 #define MAX_ALL_GROUPS    8     /* max groups in the system    */
@@ -67,6 +57,9 @@
 
 /* ------------------- ACE type: allow or deny ------------------- */
 typedef enum { ACE_ALLOW, ACE_DENY } AceType;
+
+/* ---------------- Resource type: folder or file ---------------- */
+typedef enum { RES_FOLDER, RES_FILE } ResourceType;
 
 /* ----------------- Forward declarations / types ----------------- */
 
@@ -95,6 +88,8 @@ typedef struct {
     int     sid;
     int     is_group;
     int     rights;
+    int     is_inherited;            /* 0 = Explicit, 1 = Inherited */
+    char    inherited_from[64];      /* Name of parent folder source */
 } ACE;
 
 typedef struct {
@@ -103,9 +98,12 @@ typedef struct {
 } DACL;
 
 typedef struct {
-    char  name[64];
-    int   owner_uid;
-    DACL  dacl;
+    char         name[64];
+    ResourceType type;
+    int          parent_id;           /* index of parent resource, -1 if root */
+    int          inherit_from_parent; /* 1 = enabled, 0 = blocked ("broken inheritance") */
+    int          owner_uid;
+    DACL         dacl;
 } Resource;
 
 typedef struct {
@@ -172,52 +170,123 @@ int ace_matches_token(const ACE *ace, const AccessToken *token) {
 }
 
 /* ================================================================
-   THE CORE WINDOWS ACCESS-CHECK ALGORITHM
-   Returns 1 = GRANTED, 0 = DENIED.
+   PROPAGATE INHERITANCE (Folders -> Files)
+   Copies parent container ACEs to children if inheritance is on.
+   ================================================================ */
+void propagate_inheritance(void) {
+    for (int i = 0; i < resource_count; i++) {
+        Resource *child = &resources[i];
+        if (!child->inherit_from_parent || child->parent_id < 0)
+            continue;
+
+        Resource *parent = &resources[child->parent_id];
+        for (int p = 0; p < parent->dacl.count; p++) {
+            ACE *parent_ace = &parent->dacl.entries[p];
+            if (child->dacl.count >= MAX_ACES) break;
+
+            /* Copy ACE to child with inherited flag */
+            ACE *child_ace = &child->dacl.entries[child->dacl.count++];
+            child_ace->type = parent_ace->type;
+            child_ace->sid = parent_ace->sid;
+            child_ace->is_group = parent_ace->is_group;
+            child_ace->rights = parent_ace->rights;
+            child_ace->is_inherited = 1;
+            strncpy(child_ace->inherited_from, parent->name, sizeof(child_ace->inherited_from) - 1);
+        }
+    }
+}
+
+/* ================================================================
+   THE CANONICAL WINDOWS ACCESS-CHECK ALGORITHM
+   With Explicit vs Inherited Precedence
    ================================================================ */
 int access_check(const AccessToken *token, const Resource *res,
                  int requested_rights, char *reason, int reason_size)
 {
-    /* Step 0: Owner always gets implicit full control */
+    /* Step 0: Owner Authority */
     if (token->uid == res->owner_uid) {
         snprintf(reason, reason_size,
                  "GRANTED -- requestor is the OWNER (implicit Full Control)");
         return 1;
     }
 
-    /* Step 1: Walk ACEs in order */
     int granted_mask = 0;
     const DACL *dacl = &res->dacl;
 
+    /* Phase 1: Check EXPLICIT DENY ACEs */
     for (int i = 0; i < dacl->count; i++) {
         const ACE *ace = &dacl->entries[i];
+        if (ace->is_inherited) continue; /* skip inherited in this phase */
         if (!ace_matches_token(ace, token)) continue;
 
-        if (ace->type == ACE_DENY) {
-            if (ace->rights & requested_rights) {
-                const char *who = ace->is_group ? group_name(ace->sid)
-                                                : user_name(ace->sid);
-                char denied_rights[128];
-                rights_to_string(ace->rights & requested_rights,
-                                 denied_rights, sizeof(denied_rights));
-                snprintf(reason, reason_size,
-                         "DENIED -- explicit DENY ACE for %s [%s] matched at ACE #%d",
-                         who, denied_rights, i + 1);
-                return 0;
-            }
-        } else {
+        if (ace->type == ACE_DENY && (ace->rights & requested_rights)) {
+            const char *who = ace->is_group ? group_name(ace->sid) : user_name(ace->sid);
+            char dbuf[128];
+            rights_to_string(ace->rights & requested_rights, dbuf, sizeof(dbuf));
+            snprintf(reason, reason_size,
+                     "DENIED -- EXPLICIT DENY ACE for %s [%s] matched on %s",
+                     who, dbuf, res->name);
+            return 0;
+        }
+    }
+
+    /* Phase 2: Accumulate EXPLICIT ALLOW ACEs */
+    for (int i = 0; i < dacl->count; i++) {
+        const ACE *ace = &dacl->entries[i];
+        if (ace->is_inherited) continue;
+        if (!ace_matches_token(ace, token)) continue;
+
+        if (ace->type == ACE_ALLOW) {
             granted_mask |= ace->rights;
         }
     }
 
-    /* Step 2: Accumulated rights check */
+    /* If explicit allows satisfy the request, GRANT immediately!
+       (This is how an Explicit Allow overrides an Inherited Deny!) */
     if ((granted_mask & requested_rights) == requested_rights) {
         snprintf(reason, reason_size,
-                 "GRANTED -- sufficient ALLOW ACEs found in DACL");
+                 "GRANTED -- sufficient EXPLICIT ALLOW ACEs found on %s (overrides any inherited denies)",
+                 res->name);
         return 1;
     }
 
-    /* Step 3: Implicit deny */
+    /* Phase 3: Check INHERITED DENY ACEs */
+    for (int i = 0; i < dacl->count; i++) {
+        const ACE *ace = &dacl->entries[i];
+        if (!ace->is_inherited) continue; /* check only inherited */
+        if (!ace_matches_token(ace, token)) continue;
+
+        /* Only deny if it affects rights not already granted explicitly */
+        int remaining_needed = requested_rights & ~granted_mask;
+        if (ace->type == ACE_DENY && (ace->rights & remaining_needed)) {
+            const char *who = ace->is_group ? group_name(ace->sid) : user_name(ace->sid);
+            char dbuf[128];
+            rights_to_string(ace->rights & remaining_needed, dbuf, sizeof(dbuf));
+            snprintf(reason, reason_size,
+                     "DENIED -- INHERITED DENY ACE for %s [%s] (from %s)",
+                     who, dbuf, ace->inherited_from);
+            return 0;
+        }
+    }
+
+    /* Phase 4: Accumulate INHERITED ALLOW ACEs */
+    for (int i = 0; i < dacl->count; i++) {
+        const ACE *ace = &dacl->entries[i];
+        if (!ace->is_inherited) continue;
+        if (!ace_matches_token(ace, token)) continue;
+
+        if (ace->type == ACE_ALLOW) {
+            granted_mask |= ace->rights;
+        }
+    }
+
+    /* Phase 5: Final Accumulation & Implicit Deny */
+    if ((granted_mask & requested_rights) == requested_rights) {
+        snprintf(reason, reason_size,
+                 "GRANTED -- rights accumulated from inherited ACEs");
+        return 1;
+    }
+
     char missing[128];
     rights_to_string(requested_rights & ~granted_mask, missing, sizeof(missing));
     snprintf(reason, reason_size,
@@ -256,19 +325,32 @@ void print_dacl(const DACL *dacl) {
         const ACE *a = &dacl->entries[i];
         char rbuf[128];
         rights_to_string(a->rights, rbuf, sizeof(rbuf));
-        const char *who = a->is_group ? group_name(a->sid)
-                                      : user_name(a->sid);
-        printf("    ACE #%d: %-5s  %-18s  [%s]\n",
-               i + 1, a->type == ACE_DENY ? "DENY" : "ALLOW", who, rbuf);
+        const char *who = a->is_group ? group_name(a->sid) : user_name(a->sid);
+        if (a->is_inherited) {
+            printf("    ACE #%d: %-5s %-16s [%-12s] (Inherited from %s)\n",
+                   i + 1, a->type == ACE_DENY ? "DENY" : "ALLOW", who, rbuf, a->inherited_from);
+        } else {
+            printf("    ACE #%d: %-5s %-16s [%-12s] [EXPLICIT]\n",
+                   i + 1, a->type == ACE_DENY ? "DENY" : "ALLOW", who, rbuf);
+        }
     }
 }
 
 void print_resource(const Resource *r) {
-    printf("  Resource : \"%s\"   Owner: %s\n", r->name, user_name(r->owner_uid));
-    printf("  DACL (%d ACEs):\n", r->dacl.count);
+    const char *typestr = (r->type == RES_FOLDER) ? "FOLDER" : "FILE";
+    printf("  Resource : \"%s\" (%s)   Owner: %s\n", r->name, typestr, user_name(r->owner_uid));
+    if (r->parent_id >= 0) {
+        printf("    Parent   : %s (Inheritance: %s)\n",
+               resources[r->parent_id].name,
+               r->inherit_from_parent ? "ENABLED" : "BLOCKED");
+    }
+    printf("    DACL (%d ACEs):\n", r->dacl.count);
     print_dacl(&r->dacl);
 }
 
+/* ================================================================
+   BUILD DEMO WORLD WITH FOLDER -> FILE HIERARCHY
+   ================================================================ */
 void build_demo_world(void) {
     group_count = 0;
     user_count = 0;
@@ -298,27 +380,66 @@ void build_demo_world(void) {
     users[user_count].group_ids[1] = 102;
     user_count++;
 
+    /* --- Resource 0: Parent Folder "C:\Projects" --- */
+    Resource *r0 = &resources[resource_count++];
+    strcpy(r0->name, "C:\\Projects");
+    r0->type = RES_FOLDER;
+    r0->parent_id = -1;
+    r0->inherit_from_parent = 0;
+    r0->owner_uid = 1; /* Alice */
+    r0->dacl.count = 3;
+    r0->dacl.entries[0] = (ACE){ACE_DENY,  103, 1, RIGHT_FULL, 0, ""}; /* Deny Guests */
+    r0->dacl.entries[1] = (ACE){ACE_ALLOW, 100, 1, RIGHT_FULL, 0, ""}; /* Allow Admins */
+    r0->dacl.entries[2] = (ACE){ACE_ALLOW, 101, 1, RIGHT_READ, 0, ""}; /* Allow Users READ */
+
+    /* --- Resource 1: Child File "C:\Projects\specs.docx" ---
+       Inherits 100% from C:\Projects. No explicit ACEs. */
     Resource *r1 = &resources[resource_count++];
-    strcpy(r1->name, "C:\\Confidential\\report.docx");
+    strcpy(r1->name, "C:\\Projects\\specs.docx");
+    r1->type = RES_FILE;
+    r1->parent_id = 0; /* child of C:\Projects */
+    r1->inherit_from_parent = 1;
     r1->owner_uid = 1;
-    r1->dacl.count = 3;
-    r1->dacl.entries[0] = (ACE){ACE_DENY,  103, 1, RIGHT_FULL};
-    r1->dacl.entries[1] = (ACE){ACE_ALLOW, 100, 1, RIGHT_FULL};
-    r1->dacl.entries[2] = (ACE){ACE_ALLOW, 101, 1, RIGHT_READ};
+    r1->dacl.count = 0;
 
+    /* --- Resource 2: Child File "C:\Projects\public_notes.txt" ---
+       Inherits from C:\Projects, BUT has an EXPLICIT ALLOW for Guests!
+       Demonstrates: EXPLICIT ALLOW BEATS INHERITED DENY! */
     Resource *r2 = &resources[resource_count++];
-    strcpy(r2->name, "D:\\Shared\\project.xlsx");
-    r2->owner_uid = 2;
-    r2->dacl.count = 2;
-    r2->dacl.entries[0] = (ACE){ACE_DENY,  102, 1, RIGHT_WRITE | RIGHT_DELETE};
-    r2->dacl.entries[1] = (ACE){ACE_ALLOW, 101, 1, RIGHT_READ  | RIGHT_WRITE};
+    strcpy(r2->name, "C:\\Projects\\public_notes.txt");
+    r2->type = RES_FILE;
+    r2->parent_id = 0;
+    r2->inherit_from_parent = 1;
+    r2->owner_uid = 1;
+    r2->dacl.count = 1;
+    r2->dacl.entries[0] = (ACE){ACE_ALLOW, 103, 1, RIGHT_READ, 0, ""}; /* Explicit Allow Guests */
 
+    /* --- Resource 3: Child File "C:\Projects\secret_budget.xlsx" ---
+       Inherits from C:\Projects, BUT has an EXPLICIT DENY for Users!
+       Demonstrates: EXPLICIT DENY BEATS INHERITED ALLOW! */
     Resource *r3 = &resources[resource_count++];
-    strcpy(r3->name, "C:\\System\\boot.ini");
+    strcpy(r3->name, "C:\\Projects\\secret_budget.xlsx");
+    r3->type = RES_FILE;
+    r3->parent_id = 0;
+    r3->inherit_from_parent = 1;
     r3->owner_uid = 1;
     r3->dacl.count = 1;
-    r3->dacl.entries[0] = (ACE){ACE_ALLOW, 100, 1, RIGHT_READ};
+    r3->dacl.entries[0] = (ACE){ACE_DENY, 101, 1, RIGHT_READ, 0, ""}; /* Explicit Deny Users */
 
+    /* --- Resource 4: "C:\System\boot.ini" --- */
+    Resource *r4 = &resources[resource_count++];
+    strcpy(r4->name, "C:\\System\\boot.ini");
+    r4->type = RES_FILE;
+    r4->parent_id = -1;
+    r4->inherit_from_parent = 0;
+    r4->owner_uid = 1;
+    r4->dacl.count = 1;
+    r4->dacl.entries[0] = (ACE){ACE_ALLOW, 100, 1, RIGHT_READ, 0, ""};
+
+    /* Propagate inherited ACEs from folders to children */
+    propagate_inheritance();
+
+    /* --- Processes --- */
     Process *p1 = &processes[process_count++];
     p1->pid = 1;  strcpy(p1->name, "cmd.exe");
     p1->token.uid = 1;
@@ -357,10 +478,10 @@ void run_demo(void) {
 
     printf("\n");
     print_separator();
-    printf("  WINDOWS SECURITY MODEL -- DEMO ENVIRONMENT\n");
+    printf("  WINDOWS SECURITY MODEL -- PERMISSION INHERITANCE DEMO\n");
     print_separator();
 
-    printf("\n  USERS:\n");
+    printf("\n  USERS & GROUPS:\n");
     for (int i = 0; i < user_count; i++) {
         printf("    UID %-2d  %-10s  Groups: ", users[i].uid, users[i].name);
         for (int j = 0; j < users[i].group_count; j++)
@@ -369,16 +490,9 @@ void run_demo(void) {
         printf("\n");
     }
 
-    printf("\n  RESOURCES:\n");
+    printf("\n  RESOURCES & INHERITANCE TREE:\n");
     for (int i = 0; i < resource_count; i++) {
         print_resource(&resources[i]);
-        printf("\n");
-    }
-
-    printf("  PROCESSES:\n");
-    for (int i = 0; i < process_count; i++) {
-        printf("  PID %d -- %s\n", processes[i].pid, processes[i].name);
-        print_token(&processes[i].token);
         printf("\n");
     }
 
@@ -388,29 +502,44 @@ void run_demo(void) {
         int requested_rights;
         const char *scenario;
     } tests[] = {
-        {0, 0, RIGHT_READ,
-         "Alice (Admin) reads report.docx"},
-        {1, 0, RIGHT_READ,
-         "Bob (User) reads report.docx"},
-        {1, 0, RIGHT_WRITE,
-         "Bob (User) writes report.docx"},
-        {2, 0, RIGHT_READ,
-         "Charlie (Guest) reads report.docx"},
-        {3, 1, RIGHT_WRITE,
-         "Dave (User+BackupOps) writes project.xlsx"},
-        {3, 1, RIGHT_READ,
-         "Dave (User+BackupOps) reads project.xlsx"},
-        {1, 2, RIGHT_READ,
-         "Bob (User) reads boot.ini"},
-        {3, 2, RIGHT_READ,
-         "Dave (BackupOps + SeBackupPrivilege) reads boot.ini"},
+        /* 1. Owner access */
+        {0, 1, RIGHT_READ,
+         "Alice (Admin) reads specs.docx -- Owner Full Control"},
+
+        /* 2. Inherited allow from folder */
+        {1, 1, RIGHT_READ,
+         "Bob (User) reads specs.docx -- Inherited ALLOW from C:\\Projects"},
+
+        /* 3. Inherited deny from folder */
+        {2, 1, RIGHT_READ,
+         "Charlie (Guest) reads specs.docx -- Inherited DENY from C:\\Projects"},
+
+        /* 4. KEY INHERITANCE TEST: Explicit Allow overrides Inherited Deny */
+        {2, 2, RIGHT_READ,
+         "Charlie (Guest) reads public_notes.txt -- EXPLICIT ALLOW overrides Inherited Deny!"},
+
+        /* 5. KEY INHERITANCE TEST: Explicit Deny overrides Inherited Allow */
+        {1, 3, RIGHT_READ,
+         "Bob (User) reads secret_budget.xlsx -- EXPLICIT DENY overrides Inherited Allow!"},
+
+        /* 6. Implicit deny */
+        {1, 1, RIGHT_WRITE,
+         "Bob (User) writes specs.docx -- Implicit Deny (inherited read only)"},
+
+        /* 7. Administrator protected file */
+        {1, 4, RIGHT_READ,
+         "Bob (User) reads boot.ini -- Implicit Deny (admin only)"},
+
+        /* 8. Privilege bypass */
+        {3, 4, RIGHT_READ,
+         "Dave (BackupOps + SeBackupPrivilege) reads boot.ini -- Privilege Bypass"},
     };
 
     int n_tests = sizeof(tests) / sizeof(tests[0]);
 
     printf("\n");
     print_separator();
-    printf("  ACCESS CHECK SCENARIOS\n");
+    printf("  ACCESS CHECK SCENARIOS (Evaluating Inheritance Rules)\n");
     print_separator();
 
     for (int t = 0; t < n_tests; t++) {
@@ -426,7 +555,7 @@ void run_demo(void) {
         printf("    Resource : %s\n", r->name);
         printf("    Requested: [%s]\n", rbuf);
 
-        if (tests[t].pid_idx == 3 && tests[t].res_idx == 2) {
+        if (tests[t].pid_idx == 3 && tests[t].res_idx == 4) {
             if (token_has_privilege(&p->token, "SeBackupPrivilege")) {
                 printf("    >> PRIVILEGE BYPASS: Token has SeBackupPrivilege\n");
                 printf("    [GRANTED] Result: SeBackupPrivilege overrides DACL\n");
@@ -451,15 +580,16 @@ void interactive_mode(void) {
     while (1) {
         printf("\n");
         print_separator();
-        printf("  INTERACTIVE MODE MENU\n");
+        printf("  INTERACTIVE MODE MENU (Permission Inheritance Enabled)\n");
         print_separator();
         printf("  1. List all users\n");
-        printf("  2. List all resources & DACLs\n");
+        printf("  2. List all resources & DACLs (shows Explicit vs Inherited)\n");
         printf("  3. List all processes & tokens\n");
         printf("  4. Perform an access check\n");
-        printf("  5. Add a new ACE to a resource's DACL\n");
-        printf("  6. Return to main menu\n");
-        printf("  Enter choice (1-6): ");
+        printf("  5. Add an EXPLICIT ACE to a resource\n");
+        printf("  6. Toggle inheritance on a resource (Break/Restore inheritance)\n");
+        printf("  7. Return to main menu\n");
+        printf("  Enter choice (1-7): ");
 
         int res = read_int_safe(&choice);
         if (res <= 0) {
@@ -467,7 +597,7 @@ void interactive_mode(void) {
             break;
         }
 
-        if (choice == 6) {
+        if (choice == 7) {
             break;
         }
 
@@ -484,7 +614,7 @@ void interactive_mode(void) {
             break;
 
         case 2:
-            printf("\n  RESOURCES:\n");
+            printf("\n  RESOURCES & DACLs:\n");
             for (int i = 0; i < resource_count; i++) {
                 printf("  [%d] ", i);
                 print_resource(&resources[i]);
@@ -560,13 +690,35 @@ void interactive_mode(void) {
             printf("  Rights bitmask (1=R, 2=W, 4=X, 8=D, sum): ");
             if (read_int_safe(&a->rights) <= 0) { printf("  Invalid.\n"); break; }
 
+            a->is_inherited = 0;
+            strcpy(a->inherited_from, "");
             d->count++;
-            printf("  ACE successfully added.\n");
+            printf("  Explicit ACE successfully added.\n");
+            break;
+        }
+
+        case 6: {
+            int ri;
+            printf("  Enter resource index (0-%d): ", resource_count - 1);
+            if (read_int_safe(&ri) <= 0 || ri < 0 || ri >= resource_count) {
+                printf("  Invalid resource index.\n");
+                break;
+            }
+            if (resources[ri].parent_id < 0) {
+                printf("  This resource has no parent (root object).\n");
+                break;
+            }
+            resources[ri].inherit_from_parent = !resources[ri].inherit_from_parent;
+            printf("  Inheritance for \"%s\" is now %s.\n",
+                   resources[ri].name,
+                   resources[ri].inherit_from_parent ? "ENABLED" : "BLOCKED (Broken Inheritance)");
+            /* Rebuild inheritance */
+            build_demo_world();
             break;
         }
 
         default:
-            printf("  Unrecognized option. Please choose 1-6.\n");
+            printf("  Unrecognized option. Please choose 1-7.\n");
             break;
         }
     }
@@ -576,11 +728,11 @@ int main(void) {
     int choice = 0;
 
     printf("+--------------------------------------------------------------+\n");
-    printf("|   WINDOWS SECURITY MODEL SIMULATION                          |\n");
-    printf("|   Access Tokens, DACLs & Privilege Checks                    |\n");
+    printf("|   WINDOWS SECURITY SIMULATOR -- PERMISSION INHERITANCE       |\n");
+    printf("|   Folders -> Files Inheritance & Canonical DACL Evaluation   |\n");
     printf("+--------------------------------------------------------------+\n");
-    printf("\n  1. Run PRESET DEMO (recommended -- 8 scenarios)\n");
-    printf("  2. INTERACTIVE mode (inspect/modify then test)\n");
+    printf("\n  1. Run PRESET DEMO (shows Folder->File Inheritance in action)\n");
+    printf("  2. INTERACTIVE mode (toggle inheritance, add ACEs, test)\n");
     printf("  Enter choice (1 or 2): ");
 
     int res = read_int_safe(&choice);
