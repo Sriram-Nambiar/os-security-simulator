@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Windows Security Model Simulation - Project Report</title>
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 18mm 20mm 18mm;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    color: #1a1a1a;
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 20px 30px;
+    background: #fff;
+  }
+
+  /* ---------- COVER PAGE ---------- */
+  .cover-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 90vh;
+    text-align: center;
+    page-break-after: always;
+    border: 3px double #1a3c6d;
+    padding: 60px 40px;
+    margin-bottom: 30px;
+  }
+  .cover-page h1 {
+    font-size: 28pt;
+    color: #1a3c6d;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+  .cover-subtitle {
+    font-size: 15pt;
+    color: #444;
+    margin-bottom: 40px;
+    font-style: italic;
+  }
+  .cover-details {
+    font-size: 13pt;
+    color: #333;
+    line-height: 2;
+  }
+  .cover-details strong { color: #1a3c6d; }
+
+  /* ---------- HEADINGS ---------- */
+  h1 { font-size: 22pt; color: #1a3c6d; border-bottom: 3px solid #1a3c6d; padding-bottom: 6px; margin-top: 40px; }
+  h2 { font-size: 16pt; color: #2a5a8f; border-bottom: 1.5px solid #ccc; padding-bottom: 4px; margin-top: 30px; }
+  h3 { font-size: 13pt; color: #333; margin-top: 20px; }
+
+  /* ---------- TABLES ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px 0;
+    font-size: 11pt;
+  }
+  th {
+    background: #1a3c6d;
+    color: #fff;
+    padding: 9px 10px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td { padding: 7px 10px; border: 1px solid #ccc; vertical-align: top; }
+  tr:nth-child(even) td { background: #f4f7fb; }
+
+  /* ---------- CODE BLOCKS ---------- */
+  code {
+    background: #f0f0f0;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 10.5pt;
+  }
+  pre {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    padding: 14px 18px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 10pt;
+    line-height: 1.5;
+    font-family: 'Consolas', 'Courier New', monospace;
+  }
+
+  /* ---------- SCREENSHOTS ---------- */
+  .screenshot-container {
+    text-align: center;
+    margin: 18px 0;
+    page-break-inside: avoid;
+  }
+  .screenshot-container img {
+    max-width: 100%;
+    border: 2px solid #666;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .screenshot-caption {
+    font-size: 10.5pt;
+    color: #555;
+    font-style: italic;
+    margin-top: 6px;
+  }
+
+  /* ---------- FLOWCHART (SVG) ---------- */
+  .flowchart-container {
+    text-align: center;
+    margin: 20px 0;
+    page-break-inside: avoid;
+  }
+  .flowchart-container svg { max-width: 100%; }
+
+  /* ---------- DIAGRAM BOX ---------- */
+  .diagram-box {
+    background: #f8f9fc;
+    border: 1.5px solid #aab;
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin: 16px 0;
+    font-family: 'Consolas', monospace;
+    font-size: 10.5pt;
+    line-height: 1.7;
+    white-space: pre;
+    overflow-x: auto;
+    page-break-inside: avoid;
+  }
+
+  /* ---------- HIGHLIGHTS ---------- */
+  .granted { color: #1b7a2d; font-weight: bold; }
+  .denied  { color: #b91c1c; font-weight: bold; }
+
+  /* ---------- PAGE BREAKS ---------- */
+  .page-break { page-break-before: always; }
+
+  /* ---------- INFO BOX ---------- */
+  .info-box {
+    background: #e8f0fe;
+    border-left: 5px solid #1a3c6d;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 11.5pt;
+  }
+
+  /* ---------- TOC ---------- */
+  .toc { margin: 20px 0; }
+  .toc ol { line-height: 2.2; font-size: 12pt; }
+  .toc a { color: #1a3c6d; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* ---------- FOOTER ---------- */
+  .footer {
+    text-align: center;
+    font-size: 10pt;
+    color: #888;
+    border-top: 1px solid #ccc;
+    padding-top: 10px;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ COVER PAGE ═══════════════════════ -->
+<div class="cover-page">
+  <h1>Windows Security Model Simulation</h1>
+  <div class="cover-subtitle">Access Tokens, Discretionary Access Control Lists &amp; Privilege Checks</div>
+  <div style="font-size:80pt; color:#1a3c6d; margin: 20px 0;">&#x1F512;</div>
+  <div class="cover-details">
+    <strong>Subject:</strong> Operating Systems<br>
+    <strong>Project Type:</strong> Simulation &amp; Comparative Study<br>
+    <strong>Language:</strong> C (Standard C11)<br>
+    <strong>Repository:</strong> github.com/Sriram-Nambiar/os-security-simulator<br>
+  </div>
+</div>
+
+<!-- ═══════════════════════ TABLE OF CONTENTS ═══════════════════════ -->
+<h1>Table of Contents</h1>
+<div class="toc">
+<ol>
+  <li><a href="#intro">Introduction</a></li>
+  <li><a href="#objectives">Objectives</a></li>
+  <li><a href="#background">Background &amp; Theory</a></li>
+  <li><a href="#architecture">System Architecture</a></li>
+  <li><a href="#algorithm">ACE Evaluation Algorithm &amp; Flowchart</a></li>
+  <li><a href="#implementation">Implementation Details</a></li>
+  <li><a href="#screenshots">Program Output &amp; Screenshots</a></li>
+  <li><a href="#scenarios">Test Scenario Analysis</a></li>
+  <li><a href="#compilation">How to Compile &amp; Run</a></li>
+  <li><a href="#conclusion">Conclusion</a></li>
+</ol>
+</div>
+
+<!-- ═══════════════════════ 1. INTRODUCTION ═══════════════════════ -->
+<h1 class="page-break" id="intro">1. Introduction</h1>
+<p>
+  Security is one of the most critical subsystems of any modern operating system.
+  Microsoft Windows employs a sophisticated <strong>Discretionary Access Control (DAC)</strong>
+  model where every running process carries an <em>Access Token</em> describing its identity
+  and privileges, and every protected resource (files, registry keys, services, kernel objects)
+  is guarded by a <em>Security Descriptor</em> containing an ordered list of
+  <em>Access Control Entries (ACEs)</em>.
+</p>
+<p>
+  This project implements a <strong>console-based C simulator</strong> that models the
+  complete Windows NT security evaluation pipeline. The simulator creates users, groups,
+  processes (with tokens), and resources (with DACLs), then demonstrates access being
+  <span class="granted">GRANTED</span> or <span class="denied">DENIED</span> based on
+  the same logical rules that the real Windows Security Reference Monitor (SRM) uses.
+</p>
+
+<div class="info-box">
+  <strong>Key Distinction:</strong> This is not a toy demo &mdash; the ACE evaluation logic
+  (deny-before-allow, ordered walk, implicit deny) directly mirrors the algorithm described
+  in Microsoft's official documentation for the <code>SeAccessCheck()</code> kernel routine.
+</div>
+
+<!-- ═══════════════════════ 2. OBJECTIVES ═══════════════════════ -->
+<h1 id="objectives">2. Objectives</h1>
+<ol>
+  <li>Model <strong>Users</strong> and <strong>Groups</strong> as security principals with unique identifiers (SIDs).</li>
+  <li>Construct <strong>Access Tokens</strong> for each simulated process, containing User SID, Group SIDs, and Privileges.</li>
+  <li>Attach <strong>Discretionary Access Control Lists (DACLs)</strong> to simulated file resources, each containing an ordered sequence of ALLOW and DENY ACEs.</li>
+  <li>Implement the <strong>Windows ACE evaluation algorithm</strong> (owner check, explicit deny, allow accumulation, implicit deny).</li>
+  <li>Demonstrate <strong>Privilege Bypass</strong> (e.g., <code>SeBackupPrivilege</code>) overriding normal DACL checks.</li>
+  <li>Provide an <strong>Interactive Mode</strong> for users to modify DACLs and test custom access scenarios at runtime.</li>
+</ol>
+
+<!-- ═══════════════════════ 3. BACKGROUND ═══════════════════════ -->
+<h1 class="page-break" id="background">3. Background &amp; Theory</h1>
+
+<h2>3.1 What is an Access Token?</h2>
+<p>
+  In the Windows NT security architecture, an <strong>Access Token</strong> is a kernel object
+  generated at user logon. It encapsulates the complete security context of a process:
+</p>
+<table>
+  <tr><th>Token Component</th><th>Description</th><th>Example</th></tr>
+  <tr>
+    <td><strong>User SID</strong></td>
+    <td>Uniquely identifies the logged-in user account</td>
+    <td><code>S-1-5-21-...-1001</code> (simplified to UID 1 in our simulator)</td>
+  </tr>
+  <tr>
+    <td><strong>Group SIDs</strong></td>
+    <td>List of all security groups the user is a member of</td>
+    <td>Administrators, Users, Backup Operators</td>
+  </tr>
+  <tr>
+    <td><strong>Privileges</strong></td>
+    <td>System-wide capabilities that bypass normal access checks</td>
+    <td><code>SeBackupPrivilege</code>, <code>SeDebugPrivilege</code></td>
+  </tr>
+</table>
+<p>Every process inherits the token of the user who launched it. Child processes inherit the parent's token.</p>
+
+<h2>3.2 What is a Security Descriptor &amp; DACL?</h2>
+<p>
+  Every securable object in Windows has a <strong>Security Descriptor</strong> that contains:
+</p>
+<ul>
+  <li><strong>Owner SID:</strong> The user who owns the object (has implicit full control).</li>
+  <li><strong>DACL (Discretionary Access Control List):</strong> An ordered sequence of Access Control Entries (ACEs) specifying who is allowed or denied access.</li>
+</ul>
+<p>Each ACE in a DACL contains three fields:</p>
+<table>
+  <tr><th>ACE Field</th><th>Description</th></tr>
+  <tr><td><strong>Type</strong></td><td><code>ALLOW</code> or <code>DENY</code></td></tr>
+  <tr><td><strong>Trustee (SID)</strong></td><td>The user or group this ACE applies to</td></tr>
+  <tr><td><strong>Rights Bitmask</strong></td><td><code>READ</code>, <code>WRITE</code>, <code>EXECUTE</code>, <code>DELETE</code> (or any combination)</td></tr>
+</table>
+
+<h2>3.3 Why Order Matters: Deny-Before-Allow</h2>
+<p>
+  The fundamental rule of Windows DACL evaluation is that <strong>ACEs are processed
+  sequentially from first to last</strong>. Microsoft recommends placing DENY ACEs before
+  ALLOW ACEs. If a DENY ACE matches the requesting token and covers any requested right,
+  access is immediately refused &mdash; the system does <em>not</em> continue checking
+  subsequent ALLOW entries. This is a deliberate security design: explicit denials always
+  take precedence.
+</p>
+
+<h2>3.4 What are Privileges?</h2>
+<p>
+  Privileges are system-wide overrides granted to specific accounts or groups. Unlike ACEs
+  (which are per-object), privileges apply globally. For example:
+</p>
+<ul>
+  <li><code>SeBackupPrivilege</code> &mdash; Allows reading any file regardless of its DACL (used by backup software like Windows Backup, Veeam).</li>
+  <li><code>SeDebugPrivilege</code> &mdash; Allows attaching a debugger to any process.</li>
+  <li><code>SeTakeOwnershipPrivilege</code> &mdash; Allows taking ownership of any object.</li>
+</ul>
+
+<!-- ═══════════════════════ 4. ARCHITECTURE ═══════════════════════ -->
+<h1 class="page-break" id="architecture">4. System Architecture</h1>
+
+<h2>4.1 Data Structure Diagram</h2>
+<p>The following diagram shows how the simulator's core data structures relate to each other:</p>
+
+<div class="diagram-box">
++------------------+        +------------------+
+|     User         |        |     Group        |
++------------------+        +------------------+
+| uid: int         |        | gid: int         |
+| name: string     | ------&gt;| name: string     |
+| group_ids[]      |  has   +------------------+
+| group_count      |  many
++------------------+
+        |
+        | creates (at logon)
+        v
++------------------------+         +-------------------+
+|    Access Token        |         |    Process        |
++------------------------+         +-------------------+
+| uid: int               |&lt;-----&gt; | pid: int          |
+| group_ids[]: int[]     |  owns  | name: string      |
+| group_count: int       |        | token: AccessToken|
+| privileges[][]: string |        +-------------------+
+| privilege_count: int   |
++------------------------+
+
++--------------------+         +-----------------+
+|    Resource        |         |     ACE         |
++--------------------+         +-----------------+
+| name: string       |         | type: ALLOW/DENY|
+| owner_uid: int     |         | sid: int        |
+| dacl: DACL --------+------&gt; | is_group: bool  |
++--------------------+  has   | rights: bitmask |
+                       many   +-----------------+
+</div>
+
+<h2>4.2 Rights Bitmask Encoding</h2>
+<table>
+  <tr><th>Right</th><th>Bit Value</th><th>Hex</th><th>Description</th></tr>
+  <tr><td>READ</td><td>1</td><td><code>0x01</code></td><td>Read contents of a file or resource</td></tr>
+  <tr><td>WRITE</td><td>2</td><td><code>0x02</code></td><td>Modify or write to a file</td></tr>
+  <tr><td>EXECUTE</td><td>4</td><td><code>0x04</code></td><td>Execute a program or script</td></tr>
+  <tr><td>DELETE</td><td>8</td><td><code>0x08</code></td><td>Delete a file or resource</td></tr>
+  <tr><td>FULL CONTROL</td><td>15</td><td><code>0x0F</code></td><td>All rights combined (R+W+X+D)</td></tr>
+</table>
+
+<h2>4.3 Simulated Environment</h2>
+
+<h3>Users &amp; Groups</h3>
+<table>
+  <tr><th>UID</th><th>User</th><th>Groups</th><th>Role</th></tr>
+  <tr><td>1</td><td>Alice</td><td>Administrators, Users</td><td>System administrator</td></tr>
+  <tr><td>2</td><td>Bob</td><td>Users</td><td>Standard user</td></tr>
+  <tr><td>3</td><td>Charlie</td><td>Guests</td><td>Guest / restricted user</td></tr>
+  <tr><td>4</td><td>Dave</td><td>Users, Backup Operators</td><td>Backup technician</td></tr>
+</table>
+
+<h3>Processes &amp; Tokens</h3>
+<table>
+  <tr><th>PID</th><th>Process</th><th>User</th><th>Groups in Token</th><th>Privileges</th></tr>
+  <tr><td>1</td><td>cmd.exe</td><td>Alice</td><td>Administrators, Users</td><td>SeBackupPrivilege</td></tr>
+  <tr><td>2</td><td>notepad.exe</td><td>Bob</td><td>Users</td><td>(none)</td></tr>
+  <tr><td>3</td><td>explorer.exe</td><td>Charlie</td><td>Guests</td><td>(none)</td></tr>
+  <tr><td>4</td><td>backup.exe</td><td>Dave</td><td>Users, Backup Operators</td><td>SeBackupPrivilege</td></tr>
+</table>
+
+<h3>Resources &amp; DACLs</h3>
+<table>
+  <tr><th>Resource</th><th>Owner</th><th>ACE #1</th><th>ACE #2</th><th>ACE #3</th></tr>
+  <tr>
+    <td><code>C:\Confidential\report.docx</code></td>
+    <td>Alice</td>
+    <td><span class="denied">DENY</span> Guests [FULL]</td>
+    <td><span class="granted">ALLOW</span> Admins [FULL]</td>
+    <td><span class="granted">ALLOW</span> Users [READ]</td>
+  </tr>
+  <tr>
+    <td><code>D:\Shared\project.xlsx</code></td>
+    <td>Bob</td>
+    <td><span class="denied">DENY</span> Backup Ops [WRITE DELETE]</td>
+    <td><span class="granted">ALLOW</span> Users [READ WRITE]</td>
+    <td>&mdash;</td>
+  </tr>
+  <tr>
+    <td><code>C:\System\boot.ini</code></td>
+    <td>Alice</td>
+    <td><span class="granted">ALLOW</span> Admins [READ]</td>
+    <td>&mdash;</td>
+    <td>&mdash;</td>
+  </tr>
+</table>
+
+<!-- ═══════════════════════ 5. ALGORITHM ═══════════════════════ -->
+<h1 class="page-break" id="algorithm">5. ACE Evaluation Algorithm &amp; Flowchart</h1>
+
+<h2>5.1 Algorithm (Pseudocode)</h2>
+<pre>
+FUNCTION access_check(token, resource, requested_rights):
+
+    // Step 0: Owner override
+    IF token.uid == resource.owner_uid THEN
+        RETURN GRANTED  ("Owner has implicit Full Control")
+
+    // Step 1: Walk DACL entries sequentially
+    granted_mask = 0x00
+
+    FOR EACH ace IN resource.dacl.entries:
+        IF ace does NOT match token (user SID or any group SID):
+            CONTINUE to next ACE
+
+        IF ace.type == DENY:
+            IF (ace.rights AND requested_rights) != 0:
+                RETURN DENIED  ("Explicit DENY matched")
+
+        ELSE IF ace.type == ALLOW:
+            granted_mask = granted_mask OR ace.rights
+
+    // Step 2: Check accumulated rights
+    IF (granted_mask AND requested_rights) == requested_rights:
+        RETURN GRANTED  ("Sufficient ALLOW ACEs accumulated")
+
+    // Step 3: Implicit deny (default)
+    RETURN DENIED  ("No ACE grants remaining rights")
+</pre>
+
+<h2>5.2 Flowchart</h2>
+
+<div class="flowchart-container">
+<svg viewBox="0 0 680 820" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif" font-size="13">
+  <!-- Start -->
+  <ellipse cx="340" cy="30" rx="120" ry="22" fill="#1a3c6d" stroke="#0d2240" stroke-width="2"/>
+  <text x="340" y="35" text-anchor="middle" fill="white" font-weight="bold">Process Requests Access</text>
+
+  <line x1="340" y1="52" x2="340" y2="90" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Owner check -->
+  <rect x="220" y="90" width="240" height="44" rx="8" fill="#e8f0fe" stroke="#1a3c6d" stroke-width="2"/>
+  <text x="340" y="110" text-anchor="middle" font-weight="bold" fill="#1a3c6d">Step 0: Is Token the Owner?</text>
+
+  <!-- Yes branch - GRANTED -->
+  <line x1="460" y1="112" x2="570" y2="112" stroke="#1b7a2d" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="510" y="105" fill="#1b7a2d" font-weight="bold" font-size="11">YES</text>
+  <rect x="570" y="94" width="100" height="36" rx="6" fill="#d4edda" stroke="#1b7a2d" stroke-width="2"/>
+  <text x="620" y="117" text-anchor="middle" fill="#1b7a2d" font-weight="bold">GRANTED</text>
+
+  <line x1="340" y1="134" x2="340" y2="175" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="350" y="160" fill="#b91c1c" font-size="11">NO</text>
+
+  <!-- Privilege check -->
+  <rect x="195" y="175" width="290" height="44" rx="8" fill="#fef3e0" stroke="#d48806" stroke-width="2"/>
+  <text x="340" y="195" text-anchor="middle" font-weight="bold" fill="#8a5a00">Step 0b: Token has Privilege?</text>
+
+  <line x1="485" y1="197" x2="570" y2="197" stroke="#1b7a2d" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="525" y="190" fill="#1b7a2d" font-weight="bold" font-size="11">YES</text>
+  <rect x="570" y="179" width="100" height="36" rx="6" fill="#d4edda" stroke="#1b7a2d" stroke-width="2"/>
+  <text x="620" y="202" text-anchor="middle" fill="#1b7a2d" font-weight="bold">BYPASS</text>
+
+  <line x1="340" y1="219" x2="340" y2="265" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="350" y="248" fill="#b91c1c" font-size="11">NO</text>
+
+  <!-- Loop: Walk DACL -->
+  <rect x="195" y="265" width="290" height="44" rx="8" fill="#e8f0fe" stroke="#1a3c6d" stroke-width="2"/>
+  <text x="340" y="282" text-anchor="middle" font-weight="bold" fill="#1a3c6d">Step 1: Get Next ACE</text>
+  <text x="340" y="300" text-anchor="middle" font-size="11" fill="#555">Walk DACL entries in order</text>
+
+  <line x1="340" y1="309" x2="340" y2="350" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ACE matches token? -->
+  <polygon points="340,350 460,395 340,440 220,395" fill="#f8f9fc" stroke="#333" stroke-width="2"/>
+  <text x="340" y="392" text-anchor="middle" font-size="12">ACE matches</text>
+  <text x="340" y="407" text-anchor="middle" font-size="12">Token?</text>
+
+  <!-- No match -> loop back -->
+  <line x1="220" y1="395" x2="130" y2="395" stroke="#888" stroke-width="1.5"/>
+  <line x1="130" y1="395" x2="130" y2="287" stroke="#888" stroke-width="1.5"/>
+  <line x1="130" y1="287" x2="195" y2="287" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="155" y="388" fill="#888" font-size="11">NO</text>
+
+  <line x1="340" y1="440" x2="340" y2="485" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="355" y="468" fill="#1b7a2d" font-size="11" font-weight="bold">YES</text>
+
+  <!-- Is it DENY? -->
+  <polygon points="340,485 460,530 340,575 220,530" fill="#fde8e8" stroke="#b91c1c" stroke-width="2"/>
+  <text x="340" y="527" text-anchor="middle" font-size="12">ACE type</text>
+  <text x="340" y="542" text-anchor="middle" font-size="12">= DENY?</text>
+
+  <!-- DENY YES -> ACCESS DENIED -->
+  <line x1="460" y1="530" x2="570" y2="530" stroke="#b91c1c" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="510" y="523" fill="#b91c1c" font-weight="bold" font-size="11">YES</text>
+  <rect x="570" y="512" width="100" height="36" rx="6" fill="#fde8e8" stroke="#b91c1c" stroke-width="2"/>
+  <text x="620" y="535" text-anchor="middle" fill="#b91c1c" font-weight="bold">DENIED</text>
+
+  <!-- DENY NO (it's ALLOW) -> accumulate -->
+  <line x1="340" y1="575" x2="340" y2="615" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="355" y="600" fill="#1b7a2d" font-size="11">ALLOW</text>
+
+  <rect x="215" y="615" width="250" height="40" rx="8" fill="#d4edda" stroke="#1b7a2d" stroke-width="2"/>
+  <text x="340" y="640" text-anchor="middle" fill="#1b7a2d" font-weight="bold">Accumulate rights into mask</text>
+
+  <!-- Loop back to next ACE -->
+  <line x1="340" y1="655" x2="340" y2="675" stroke="#333" stroke-width="1.5"/>
+  <line x1="340" y1="675" x2="80" y2="675" stroke="#888" stroke-width="1.5"/>
+  <line x1="80" y1="675" x2="80" y2="287" stroke="#888" stroke-width="1.5"/>
+  <line x1="80" y1="287" x2="195" y2="287" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="180" y="690" fill="#888" font-size="11">Next ACE</text>
+
+  <!-- End of DACL -->
+  <rect x="195" y="705" width="290" height="44" rx="8" fill="#e8f0fe" stroke="#1a3c6d" stroke-width="2"/>
+  <text x="340" y="722" text-anchor="middle" font-weight="bold" fill="#1a3c6d">Step 2: All ACEs checked</text>
+  <text x="340" y="740" text-anchor="middle" font-size="11" fill="#555">All requested rights granted?</text>
+  <line x1="485" y1="310" x2="560" y2="310" stroke="#888" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="500" y="303" fill="#888" font-size="10">End of list</text>
+  <line x1="560" y1="310" x2="560" y2="727" stroke="#888" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="560" y1="727" x2="485" y2="727" stroke="#888" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+
+  <!-- Final results -->
+  <line x1="270" y1="749" x2="180" y2="790" stroke="#1b7a2d" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="200" y="770" fill="#1b7a2d" font-weight="bold" font-size="11">YES</text>
+  <rect x="110" y="780" width="110" height="36" rx="6" fill="#d4edda" stroke="#1b7a2d" stroke-width="2"/>
+  <text x="165" y="803" text-anchor="middle" fill="#1b7a2d" font-weight="bold">GRANTED</text>
+
+  <line x1="410" y1="749" x2="500" y2="790" stroke="#b91c1c" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="465" y="770" fill="#b91c1c" font-weight="bold" font-size="11">NO</text>
+  <rect x="450" y="780" width="130" height="36" rx="6" fill="#fde8e8" stroke="#b91c1c" stroke-width="2"/>
+  <text x="515" y="803" text-anchor="middle" fill="#b91c1c" font-weight="bold">DENIED</text>
+  <text x="515" y="830" text-anchor="middle" fill="#888" font-size="10">(Implicit Deny)</text>
+
+  <!-- Arrow marker def -->
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+<p style="text-align:center; font-style:italic; color:#555; font-size:10.5pt;">
+  Figure 1: Windows DACL Access Check Evaluation Flowchart
+</p>
+
+<!-- ═══════════════════════ 6. IMPLEMENTATION ═══════════════════════ -->
+<h1 class="page-break" id="implementation">6. Implementation Details</h1>
+
+<h2>6.1 Key Functions</h2>
+<table>
+  <tr><th>Function</th><th>Purpose</th></tr>
+  <tr><td><code>access_check()</code></td><td>Core DACL evaluation: owner check, deny-before-allow walk, implicit deny</td></tr>
+  <tr><td><code>ace_matches_token()</code></td><td>Determines if an ACE's trustee SID matches the requesting token (user SID or any group SID)</td></tr>
+  <tr><td><code>token_has_privilege()</code></td><td>Checks whether a token carries a specific named privilege string</td></tr>
+  <tr><td><code>build_demo_world()</code></td><td>Constructs all users, groups, resources, processes, and DACLs for the preset demo</td></tr>
+  <tr><td><code>run_demo()</code></td><td>Executes all 8 preset access-check scenarios with formatted output</td></tr>
+  <tr><td><code>interactive_mode()</code></td><td>Menu-driven loop allowing runtime inspection and modification of tokens and DACLs</td></tr>
+  <tr><td><code>read_int_safe()</code></td><td>Robust input reader using <code>fgets</code> + <code>sscanf</code> to prevent infinite loops on invalid input</td></tr>
+  <tr><td><code>rights_to_string()</code></td><td>Converts a bitmask to a human-readable string (e.g., "READ WRITE")</td></tr>
+</table>
+
+<h2>6.2 Core Access Check Logic (C Code)</h2>
+<pre>
+int access_check(const AccessToken *token, const Resource *res,
+                 int requested_rights, char *reason, int reason_size)
+{
+    // Step 0: Owner always gets implicit full control
+    if (token-&gt;uid == res-&gt;owner_uid) {
+        snprintf(reason, reason_size,
+                 "GRANTED -- requestor is the OWNER");
+        return 1;
+    }
+
+    // Step 1: Walk ACEs in order
+    int granted_mask = 0;
+    for (int i = 0; i &lt; dacl-&gt;count; i++) {
+        const ACE *ace = &amp;dacl-&gt;entries[i];
+        if (!ace_matches_token(ace, token)) continue;
+
+        if (ace-&gt;type == ACE_DENY) {
+            if (ace-&gt;rights &amp; requested_rights)
+                return 0;  // DENIED immediately
+        } else {
+            granted_mask |= ace-&gt;rights;  // accumulate
+        }
+    }
+
+    // Step 2: Check accumulated rights
+    if ((granted_mask &amp; requested_rights) == requested_rights)
+        return 1;  // GRANTED
+
+    // Step 3: Implicit deny
+    return 0;  // DENIED
+}
+</pre>
+
+<h2>6.3 Program Modes</h2>
+<table>
+  <tr><th>Mode</th><th>How to Select</th><th>Description</th></tr>
+  <tr>
+    <td><strong>Preset Demo</strong></td>
+    <td>Press <code>1</code> at startup</td>
+    <td>Runs 8 curated scenarios automatically, showing environment setup and access check results</td>
+  </tr>
+  <tr>
+    <td><strong>Interactive Mode</strong></td>
+    <td>Press <code>2</code> at startup</td>
+    <td>Menu-driven interface to list users/tokens/DACLs, add custom ACEs, and perform arbitrary access checks</td>
+  </tr>
+</table>
+
+<!-- ═══════════════════════ 7. SCREENSHOTS ═══════════════════════ -->
+<h1 class="page-break" id="screenshots">7. Program Output &amp; Screenshots</h1>
+
+<h2>7.1 Main Menu &amp; Interactive Mode</h2>
+<p>
+  When the program starts, the user selects between the preset demo (option 1) or
+  interactive mode (option 2). The interactive mode provides a menu to inspect all
+  security objects and perform custom access checks.
+</p>
+<div class="screenshot-container">
+  <img src="screenshot1_menu.png" alt="Main Menu and Interactive Mode">
+  <div class="screenshot-caption">Figure 2: Program launch showing main menu and interactive mode options</div>
+</div>
+
+<h2>7.2 Users, Resources &amp; DACL Configuration</h2>
+<p>
+  The demo environment displays all configured users with their group memberships,
+  followed by each resource's DACL showing the ordered ACE entries. Note how
+  <code>report.docx</code> has a DENY ACE for Guests placed <em>before</em> the ALLOW
+  ACEs &mdash; this is the critical deny-before-allow ordering.
+</p>
+<div class="screenshot-container">
+  <img src="screenshot2_users.png" alt="Users and Resources">
+  <div class="screenshot-caption">Figure 3: Users, groups, resources, and DACL configurations</div>
+</div>
+
+<h2>7.3 Access Check Scenario Results</h2>
+<p>
+  The simulator evaluates each scenario and prints the reasoning trace: which token
+  requested which rights on which resource, and why the result is GRANTED or DENIED.
+</p>
+<div class="screenshot-container">
+  <img src="screenshot3_scenarios.png" alt="Access Check Scenarios">
+  <div class="screenshot-caption">Figure 4: Access check scenarios showing GRANTED and DENIED results with explanations</div>
+</div>
+
+<!-- ═══════════════════════ 8. SCENARIOS ═══════════════════════ -->
+<h1 class="page-break" id="scenarios">8. Test Scenario Analysis</h1>
+
+<p>The preset demo runs 8 distinct scenarios, each designed to demonstrate a specific Windows security principle:</p>
+
+<table>
+  <tr>
+    <th>#</th>
+    <th>Scenario</th>
+    <th>Request</th>
+    <th>Result</th>
+    <th>Principle Demonstrated</th>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td>Alice reads <code>report.docx</code></td>
+    <td>READ</td>
+    <td class="granted">GRANTED</td>
+    <td><strong>Owner Authority:</strong> File owner has implicit full control; DACL is not even consulted.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>Bob reads <code>report.docx</code></td>
+    <td>READ</td>
+    <td class="granted">GRANTED</td>
+    <td><strong>Group Allow:</strong> ACE #3 grants READ to the Users group; Bob is a member of Users.</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Bob writes <code>report.docx</code></td>
+    <td>WRITE</td>
+    <td class="denied">DENIED</td>
+    <td><strong>Implicit Deny:</strong> No ACE grants WRITE to Users; after walking all ACEs, the right remains unsatisfied.</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>Charlie reads <code>report.docx</code></td>
+    <td>READ</td>
+    <td class="denied">DENIED</td>
+    <td><strong>Explicit Deny Precedence:</strong> ACE #1 explicitly denies Guests all rights; even though Users are allowed READ, Guests are blocked first.</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>Dave writes <code>project.xlsx</code></td>
+    <td>WRITE</td>
+    <td class="denied">DENIED</td>
+    <td><strong>Deny-Before-Allow:</strong> Dave is in both Users (ALLOW WRITE) and Backup Operators (DENY WRITE). The DENY ACE appears first in the DACL, so access is immediately rejected.</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>Dave reads <code>project.xlsx</code></td>
+    <td>READ</td>
+    <td class="granted">GRANTED</td>
+    <td><strong>Targeted Deny:</strong> The DENY ACE only covers WRITE and DELETE; READ is not denied, so it accumulates from the Users ALLOW ACE.</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td>Bob reads <code>boot.ini</code></td>
+    <td>READ</td>
+    <td class="denied">DENIED</td>
+    <td><strong>Implicit Deny:</strong> The only ACE grants READ to Administrators; Bob is not an admin, so the right is never granted.</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td>Dave reads <code>boot.ini</code></td>
+    <td>READ</td>
+    <td class="granted">GRANTED</td>
+    <td><strong>Privilege Bypass:</strong> Dave's token carries <code>SeBackupPrivilege</code>, which overrides the DACL entirely &mdash; just like the real Windows Backup utility.</td>
+  </tr>
+</table>
+
+<!-- ═══════════════════════ 9. COMPILATION ═══════════════════════ -->
+<h1 class="page-break" id="compilation">9. How to Compile &amp; Run</h1>
+
+<h2>9.1 Prerequisites</h2>
+<ul>
+  <li>A C compiler such as <strong>GCC</strong> (MinGW on Windows, Clang on macOS, or GCC on Linux).</li>
+</ul>
+
+<h2>9.2 Compilation</h2>
+<pre>gcc -o windows_acl.exe windows_acl.c -Wall</pre>
+
+<h2>9.3 Execution</h2>
+<pre>.\windows_acl.exe</pre>
+<p>Select option <code>1</code> for the preset demo or <code>2</code> for interactive mode.</p>
+
+<h2>9.4 Source Repository</h2>
+<p>
+  <strong>GitHub:</strong>
+  <a href="https://github.com/Sriram-Nambiar/os-security-simulator">
+    https://github.com/Sriram-Nambiar/os-security-simulator
+  </a>
+</p>
+
+<!-- ═══════════════════════ 10. CONCLUSION ═══════════════════════ -->
+<h1 id="conclusion">10. Conclusion</h1>
+<p>
+  This project successfully demonstrates the core Windows NT security authorization model
+  through a working C simulation. The key takeaways are:
+</p>
+<ol>
+  <li><strong>Every process has an identity</strong> &mdash; Access Tokens carry the user SID, group SIDs, and privileges that collectively define what a process is allowed to do.</li>
+  <li><strong>Every resource has a policy</strong> &mdash; DACLs define who can access what, using an ordered list of ALLOW and DENY ACEs.</li>
+  <li><strong>Order matters</strong> &mdash; DENY ACEs evaluated before ALLOW ACEs ensure that explicit restrictions always take priority, even when a user belongs to multiple groups with conflicting permissions.</li>
+  <li><strong>Implicit deny is the default</strong> &mdash; If no ACE explicitly grants a requested right, access is denied. This is a secure-by-default design philosophy.</li>
+  <li><strong>Privileges provide system-level overrides</strong> &mdash; Special capabilities like <code>SeBackupPrivilege</code> allow trusted system utilities to bypass normal ACL restrictions for legitimate administrative tasks.</li>
+</ol>
+<p>
+  The simulator provides both a preset demonstration for quick evaluation and an interactive
+  mode for experimentation, making it a practical educational tool for understanding
+  operating system security fundamentals.
+</p>
+
+<div class="footer">
+  Windows Security Model Simulation &mdash; OS Security Simulator Project
+</div>
+
+</body>
+</html>
