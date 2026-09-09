@@ -6,3 +6,7 @@
 # IDE / Editor
 .vscode/
 .idea/
+
+# Local Reports (keep local, not tracked in git)
+*.pdf
+*.html
