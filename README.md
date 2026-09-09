@@ -59,6 +59,29 @@ gcc -o windows_acl.exe windows_acl.c -Wall
 
 ---
 
+## Program Output & Screenshots
+
+### 1. Startup & Interactive Menu
+Launch screen showing the mode selection and the interactive administration menu:
+
+![Main Menu and Interactive Mode](assets/screenshot1_menu.png)
+
+---
+
+### 2. Loaded Security Principals & DACLs
+Display of configured user accounts, group memberships, and resource DACLs with ordered ACE entries:
+
+![Users and Resources](assets/screenshot2_users.png)
+
+---
+
+### 3. Scenario Evaluation & Decision Traces
+Console output showing the reasoning trace for access decisions (owner overrides, group allowances, and explicit deny precedence):
+
+![Access Check Scenarios](assets/screenshot3_scenarios.png)
+
+---
+
 ## Preset Demonstration Scenarios
 
 | # | Scenario | Resource | Requested | Result | Principle Demonstrated |
@@ -79,5 +102,6 @@ gcc -o windows_acl.exe windows_acl.c -Wall
 | File | Purpose |
 | :--- | :--- |
 | `windows_acl.c` | Windows security simulator with Folder $\rightarrow$ File inheritance |
+| `assets/` | Folder containing output demonstration screenshots |
 | `README.md` | Architecture and inheritance documentation |
-| `Project_Report.pdf` | Comprehensive academic project report |
+| `.gitignore` | Ignores compiled binaries and IDE workspace files |
