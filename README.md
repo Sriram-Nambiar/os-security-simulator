@@ -104,21 +104,21 @@ When started, choose between:
 ### 1. Startup & Interactive Menu
 Launch screen showing the mode selection and the interactive administration menu:
 
-![Main Menu and Interactive Mode](screenshot1_menu.png)
+![Main Menu and Interactive Mode](assets/screenshot1_menu.png)
 
 ---
 
 ### 2. Loaded Security Principals & DACLs
 Display of configured user accounts, group memberships, and resource DACLs with ordered ACE entries:
 
-![Users and Resources](screenshot2_users.png)
+![Users and Resources](assets/screenshot2_users.png)
 
 ---
 
 ### 3. Scenario Evaluation & Decision Traces
 Console output showing the reasoning trace for access decisions (owner overrides, group allowances, and explicit deny precedence):
 
-![Access Check Scenarios](screenshot3_scenarios.png)
+![Access Check Scenarios](assets/screenshot3_scenarios.png)
 
 ---
 
@@ -144,8 +144,6 @@ The included demo walks through 8 distinct real-world security scenarios:
 | File | Purpose |
 | :--- | :--- |
 | `windows_acl.c` | Windows security simulator (Access Tokens, DACLs, ACE evaluation) |
-| `screenshot1_menu.png` | Output screenshot: Startup and Interactive Menu |
-| `screenshot2_users.png` | Output screenshot: Security Principals & DACL definitions |
-| `screenshot3_scenarios.png` | Output screenshot: Access Check evaluation traces |
+| `assets/` | Folder containing output demonstration screenshots |
 | `README.md` | Architecture documentation and scenario walkthrough |
 | `.gitignore` | Ignores compiled binaries and IDE workspace files |
